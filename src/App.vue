@@ -1,20 +1,27 @@
 <template>
     <div ref="page" class="pagewarp">
-        <div div ref="el" :style="style" style="position: fixed; width: 200px; height: 280px;opacity: 1;">
-            <canvas id="live2dcanvas" width="400" height="800" style="position: absolute; left: 0px; top: 0px; width: 200px; height: 280px;"></canvas>
+        <div ref="el" :style="`height: ${modelAttr.height}px;width: ${modelAttr.width}px;${style}`" style="position: fixed; opacity: 1;" v-if="! reload">
+            <div class="live2d-switch cursor-pointer" alt="切换" v-show="isHovered" @click="onSwitchHandle">
+                <i class="iconfont icon-switch"></i>
+            </div>
+            <canvas id="live2dcanvas" :style="`height: ${modelAttr.height}px;width: ${modelAttr.width}px;`" style="position: absolute; left: 0px; bottom: 0px;"></canvas>
         </div>
     </div>
 </template>
 
 <script>
-    import { defineComponent, onMounted, ref, watch} from '@vue/composition-api'
+    import { computed, defineComponent, onMounted, ref, watch, nextTick} from '@vue/composition-api'
     import { useDraggable, useElementSize, useElementHover } from '@vueuse/core'
-    import L2Dwidget from 'L2Dwidget'
+    import { L2Dwidget } from './libs/L2Dwidget'
+    import { useModelHook } from '@/hooks/useModelHook'
+    import models from './model'
+    import _ from 'lodash'
 
     export default defineComponent({
         setup(){
             let el = ref(null)
             let page = ref(null)
+            let reload = ref(false)
 
             const { width, height } = useElementSize(page)
 
@@ -22,35 +29,39 @@
                 initialValue: { x: 0, y: 0 },
             })
 
-            onMounted(() => {
+            let [ model, setModel ] = useModelHook('shizuku')
+
+            const L2Dinit = (config) => {
                 L2Dwidget.init({
-                    name: {
-                        canvas: 'live2dcanvas',
-                        div: 'live2d-widget',
-                    },
-                    dialog: {
-                        // 开启对话框
-                        enable: false,
-                        script: {
-                            // 每空闲 10 秒钟，显示一条一言
-                            'every idle 10s': '$hitokoto$',
-                            // 当触摸到星星图案
-                            'hover .star': '星星在天上而你在我心里 (*/ω＼*)',
-                            // 当触摸到角色身体
-                            'tap body': '哎呀！别碰我！',
-                            // 当触摸到角色头部
-                            'tap face': '人家已经不是小孩子了！'
-                        }
+                    model: {
+                        jsonPath: config.jsonPath
                     }
+                })
+            }
+
+            let modelAttr = computed(() => {
+                return model.value.attr
+            })
+
+            onMounted(() => {
+                L2Dinit({ jsonPath: model.value.jsonPath })
+            })
+
+            watch(model, (newModel) => {
+                reload.value = true
+                document.getElementById('live2d-widget').remove()
+                nextTick(() => {
+                    reload.value = false
+                    L2Dinit({ jsonPath: newModel.jsonPath })
                 })
             })
 
             watch(width, (w) => {
-                x.value = w - 220
+                x.value = w - (parseInt(modelAttr.value.width) + 20)
             })
 
             watch(height, (h) => {
-                y.value = h - 300
+                y.value = h - (parseInt(modelAttr.value.height) + 20)
             })
 
             const isHovered = useElementHover(el)
@@ -67,11 +78,20 @@
                 })()
             })
 
+            const onSwitchHandle = () => {
+                let index = _.random(0, models.length - 1)
+                setModel(models[index].name)
+            }
+
             return {
                 el,
                 page,
+                isHovered,
+                reload,
+                modelAttr,
                 style,
-                isHovered
+                model,
+                onSwitchHandle
             }
         }
     })
@@ -84,5 +104,15 @@
 
     #live2d-widget{
         display: none;   
+    }
+
+    .live2d-switch {
+        position: absolute;
+        left: 0px;
+        z-index: 1;
+    }
+
+    .live2d-switch i {
+        font-size: 32px;
     }
 </style>
